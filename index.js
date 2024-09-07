@@ -1,32 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const app = express();
 const path = require("path");
-const http = require("http");
-const multer = require("multer");
 const fs = require("fs");
+const multer = require("multer");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
+const app = express();
 const port = process.env.PORT || 5000;
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
-// create directory for save the upload image:
 
+// Create directory for saving uploaded images
 const uploadDir = path.join(__dirname, "public", "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
 // Set up storage with destination and filename configuration
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Save files in the public/uploads directory
-    cb(null, path.join(__dirname, "public", "uploads"));
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
   },
-  filename: function (req, file, cb) {
-    // Use a unique filename with the original file extension
+  filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
@@ -48,41 +46,29 @@ async function run() {
     await client.connect();
 
     const db = client.db("chatApp");
-    const messagesCollection = db.collection("messages");
     const usersCollection = db.collection("users");
 
     // Handle user registration with image upload
     app.post("/auth", upload.single("avatar"), async (req, res) => {
       try {
-        // const userInfo = req.body;
-        // console.log(userInfo);
-
         const { name, email, password } = req.body;
         let avatarUrl = null;
 
-        // Check if a file is uploaded and construct the avatar URL
         if (req.file) {
           avatarUrl = `/uploads/${req.file.filename}`;
         }
 
-        // Create a user object to be inserted into the database
-        const user = {
-          name,
-          email,
-          password,
-          avatarUrl,
-        };
-
-        // Insert the user into the database
+        const user = { name, email, password, avatarUrl };
         const result = await usersCollection.insertOne(user);
-        const registerUserId = result.insertedId;
-        // console.log(registerUserId);
-        // Send a response once after successfully saving the user
-        res.status(201).json({ success: true, registerUserId, file: req.file });
-        // .json({ success: true, userId: result.insertedId, file: req.file });
+        res
+          .status(201)
+          .json({
+            success: true,
+            registerUserId: result.insertedId,
+            file: req.file,
+          });
       } catch (error) {
         console.error("Error saving user:", error);
-        // Send an error response if something goes wrong
         res
           .status(500)
           .json({ success: false, error: "Internal Server Error" });
@@ -90,35 +76,47 @@ async function run() {
     });
 
     // Serve the uploaded images statically
-    app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+    app.use("/uploads", express.static(uploadDir));
+
+    // Handle user login
     app.post("/auth/login", async (req, res) => {
       const userInfo = req.body;
-      console.log(userInfo);
-
-      const alreadyExist = await usersCollection.findOne({
+      const existingUser = await usersCollection.findOne({
         email: userInfo?.email,
       });
-      console.log("data", alreadyExist);
 
-      if (!alreadyExist) {
+      if (!existingUser) {
         return res.status(400).json({
-          message: "User Does Not Exists",
+          message: "User Does Not Exist",
           success: false,
           data: {},
         });
-      } else {
-        return res.status(200).json({
-          message: "Log In Successfull",
-          success: true,
-          data: alreadyExist,
-        });
+      }
+
+      res.status(200).json({
+        message: "Login Successful",
+        success: true,
+        data: existingUser,
+      });
+    });
+
+    // Get users excluding the logged-in user
+    app.get("/users/:id", async (req, res) => {
+      const loggedInUserId = req.params.id;
+
+      try {
+        const users = await usersCollection
+          .find({ _id: { $ne: new ObjectId(loggedInUserId) } })
+          .toArray();
+        res.json({ data: users });
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+        res.status(500).json({ error: "Failed to fetch users" });
       }
     });
 
     await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("Connected to MongoDB successfully!");
   } catch (error) {
     console.error("An error occurred while connecting to MongoDB:", error);
   }
@@ -131,5 +129,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Socket.IO server is running on port: ${port}`);
+  console.log(`Server is running on port: ${port}`);
 });
