@@ -4,10 +4,19 @@ require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const http = require("http");
+const { Server } = require("socket.io");
 const app = express();
 const port = process.env.PORT || 5000;
+const server = http.createServer(app);
+const {
+  MongoClient,
+  ServerApiVersion,
+  ObjectId,
+  Timestamp,
+} = require("mongodb");
+const { timeStamp } = require("console");
+// const { Socket } = require("dgram");
 
 // Middlewares
 app.use(cors());
@@ -47,6 +56,7 @@ async function run() {
 
     const db = client.db("chatApp");
     const usersCollection = db.collection("users");
+    const messageCollection = db.collection("messages");
 
     // Handle user registration with image upload
     app.post("/auth", upload.single("avatar"), async (req, res) => {
@@ -60,13 +70,11 @@ async function run() {
 
         const user = { name, email, password, avatarUrl };
         const result = await usersCollection.insertOne(user);
-        res
-          .status(201)
-          .json({
-            success: true,
-            registerUserId: result.insertedId,
-            file: req.file,
-          });
+        res.status(201).json({
+          success: true,
+          registerUserId: result.insertedId,
+          file: req.file,
+        });
       } catch (error) {
         console.error("Error saving user:", error);
         res
@@ -104,6 +112,10 @@ async function run() {
     app.get("/users/:id", async (req, res) => {
       const loggedInUserId = req.params.id;
 
+      if (!ObjectId.isValid(loggedInUserId)) {
+        return res.status(400).json({ err: "Invalid user id" });
+      }
+
       try {
         const users = await usersCollection
           .find({ _id: { $ne: new ObjectId(loggedInUserId) } })
@@ -115,19 +127,139 @@ async function run() {
       }
     });
 
+    // get single user:
+    app.get("/single-user/:id", async (req, res) => {
+      const userId = req.params.id;
+
+      if (!userId || !ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: "Invalid or missing user ID" });
+      }
+      console.log("myId 138", userId); // This should log the correct userId
+
+      try {
+        const objectId = new ObjectId(userId);
+
+        const user = await usersCollection.findOne({ _id: objectId });
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(200).json({
+          message: "Get Single User",
+          success: true,
+          data: user,
+        });
+      } catch (error) {
+        return res.status(500).json({
+          message: "Error fetching user",
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // app.get("/single-user/:id", async (req, res) => {
+    //   const userId = req.params.id;
+
+    //   if (!userId || !ObjectId.isValid(userId)) {
+    //     return res.status(400).json({ error: "Invalid or missing user ID" });
+    //   }
+    //   console.log("myId 138", userId); //todo not getting my id:
+    //   try {
+    //     const objectId = new ObjectId(userId);
+
+    //     const user = await usersCollection.findOne({ _id: objectId });
+    //     if (!user) {
+    //       return res.status(404).json({ message: "User not found" });
+    //     }
+    //     return res.status(200).json({
+    //       message: "Get Single User",
+    //       success: true,
+    //       data: user,
+    //     });
+    //   } catch (error) {
+    //     return res.status(500).json({
+    //       message: "Error fetching user",
+    //       success: false,
+    //       error: error.message,
+    //     });
+    //   }
+    // });
+
+    // socket io:
+    const io = new Server(server, {
+      cors: {
+        origin: "http://localhost:3000",
+        methods: ["GET", "POST"],
+      },
+    });
+
+    const users = {};
+    io.on("connection", (socket) => {
+      console.log("A user is Connected:", socket.id); //user connected suffully
+
+      socket.on("register", (userId) => {
+        users[userId] = socket.id;
+      });
+
+      // sendMessage:
+      socket.on("sendMessage", async (data) => {
+        console.log(data); //todo: message is not send
+        const { senderId, receiverId, text } = data;
+        // message save on database:
+        const messages = await messageCollection.insertOne({
+          senderId,
+          receiverId,
+          text,
+          Timestamp: new Date(),
+        });
+        console.log(messages);
+        // send real time data to sender and receiver:
+        io.emit(`receiverMessage:${senderId}`, { text, senderId });
+        io.emit(`receivermessage:${receiverId}`, { text, senderId });
+      });
+
+      // get conversation of two users:
+      app.get("/conversation/:user1Id/:user2Id", async (req, res) => {
+        const { user1Id, user2Id } = req.params;
+        console.log(user1Id, user2Id); //todo:
+
+        const conversation = await messageCollection
+          .find({
+            $or: [
+              { senderId: user1Id, receiverId: user2Id },
+              { senderId: user2Id, receiverId: user1Id },
+            ],
+          })
+          .sort({ timeStamp: 1 })
+          .toArray();
+        res.json(conversation);
+      });
+
+      // disconnect socket io:
+      socket.on("disconnect", () => {
+        console.log("user Disconnected", socket.id);
+        // Remove the user from the users object:
+        for (const userId in users) {
+          if (users[userId] === socket.id) {
+            delete users[userId];
+            break;
+          }
+        }
+      });
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log("Connected to MongoDB successfully!");
   } catch (error) {
     console.error("An error occurred while connecting to MongoDB:", error);
   }
 }
-
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
   res.send("Socket.IO server is running");
 });
 
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port: ${port}`);
 });
