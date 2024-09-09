@@ -157,33 +157,33 @@ async function run() {
       }
     });
 
-    // app.get("/single-user/:id", async (req, res) => {
-    //   const userId = req.params.id;
+    app.get("/single-user/:id", async (req, res) => {
+      const userId = req.params.id;
 
-    //   if (!userId || !ObjectId.isValid(userId)) {
-    //     return res.status(400).json({ error: "Invalid or missing user ID" });
-    //   }
-    //   console.log("myId 138", userId); //todo not getting my id:
-    //   try {
-    //     const objectId = new ObjectId(userId);
+      if (!userId || !ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: "Invalid or missing user ID" });
+      }
+      console.log("myId 138", userId); //todo not getting my id:
+      try {
+        const objectId = new ObjectId(userId);
 
-    //     const user = await usersCollection.findOne({ _id: objectId });
-    //     if (!user) {
-    //       return res.status(404).json({ message: "User not found" });
-    //     }
-    //     return res.status(200).json({
-    //       message: "Get Single User",
-    //       success: true,
-    //       data: user,
-    //     });
-    //   } catch (error) {
-    //     return res.status(500).json({
-    //       message: "Error fetching user",
-    //       success: false,
-    //       error: error.message,
-    //     });
-    //   }
-    // });
+        const user = await usersCollection.findOne({ _id: objectId });
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(200).json({
+          message: "Get Single User",
+          success: true,
+          data: user,
+        });
+      } catch (error) {
+        return res.status(500).json({
+          message: "Error fetching user",
+          success: false,
+          error: error.message,
+        });
+      }
+    });
 
     // socket io:
     const io = new Server(server, {
@@ -195,7 +195,7 @@ async function run() {
 
     const users = {};
     io.on("connection", (socket) => {
-      console.log("A user is Connected:", socket.id); //user connected suffully
+      console.log("A user is Connected:", socket.id);
 
       socket.on("register", (userId) => {
         users[userId] = socket.id;
@@ -203,7 +203,7 @@ async function run() {
 
       // sendMessage:
       socket.on("sendMessage", async (data) => {
-        console.log(data); //todo: message is not send
+        console.log(data); //todo: message is sent but not receive on just in time on client
         const { senderId, receiverId, text } = data;
         // message save on database:
         const messages = await messageCollection.insertOne({
@@ -213,9 +213,13 @@ async function run() {
           Timestamp: new Date(),
         });
         console.log(messages);
+        const ids = [senderId, receiverId];
+        ids.forEach((id) => {
+          io.emit(`receiverMessage:${id}`, { text, senderId });
+        });
         // send real time data to sender and receiver:
-        io.emit(`receiverMessage:${senderId}`, { text, senderId });
-        io.emit(`receivermessage:${receiverId}`, { text, senderId });
+        // io.emit(`receiverMessage:${senderId}`, { text, senderId });
+        // io.emit(`receiverMessage:${receiverId}`, { text, senderId });
       });
 
       // get conversation of two users:
