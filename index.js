@@ -1,10 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const path = require("path");
-const fs = require("fs");
-const multer = require("multer");
-const http = require("http");
+const path = require("path"); //for file upload
+const fs = require("fs"); //require file system
+const multer = require("multer"); //for upload photo
+const http = require("http"); //require server for socket
 const { Server } = require("socket.io");
 const app = express();
 const port = process.env.PORT || 5000;
@@ -16,7 +16,6 @@ const {
   Timestamp,
 } = require("mongodb");
 const { timeStamp } = require("console");
-// const { Socket } = require("dgram");
 
 // Middlewares
 app.use(cors());
@@ -58,7 +57,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const messageCollection = db.collection("messages");
 
-    // Handle user registration with image upload
+    // Handle user registration with image upload and emit thge user on socket to get users on realtime for every user.
     app.post("/auth", upload.single("avatar"), async (req, res) => {
       try {
         const { name, email, password } = req.body;
@@ -76,6 +75,7 @@ async function run() {
           registerUserId: result.insertedId,
           file: req.file,
         });
+        //emit the user on socket:
         io.emit("user", user);
       } catch (error) {
         console.error("Error saving user:", error);
@@ -110,7 +110,7 @@ async function run() {
       });
     });
 
-    // Get users excluding the logged-in user
+    // Get users except the logged-in user:
     app.get("/users/:id", async (req, res) => {
       const loggedInUserId = req.params.id;
 
@@ -120,7 +120,7 @@ async function run() {
 
       try {
         const users = await usersCollection
-          .find({ _id: { $ne: new ObjectId(loggedInUserId) } })
+          .find({ _id: { $ne: new ObjectId(loggedInUserId) } }) //ne=not equal,
           .toArray();
         res.json({ data: users });
       } catch (error) {
@@ -129,63 +129,63 @@ async function run() {
       }
     });
 
-    // get single user:
-    app.get("/single-user/:id", async (req, res) => {
-      const userId = req.params.id;
+    // // get single user:
+    // app.get("/single-user/:id", async (req, res) => {
+    //   const userId = req.params.id;
 
-      if (!userId || !ObjectId.isValid(userId)) {
-        return res.status(400).json({ error: "Invalid or missing user ID" });
-      }
-      console.log("myId 138", userId); // This should log the correct userId
+    //   if (!userId || !ObjectId.isValid(userId)) {
+    //     return res.status(400).json({ error: "Invalid or missing user ID" });
+    //   }
+    //   console.log("myId 138", userId);
 
-      try {
-        const objectId = new ObjectId(userId);
+    //   try {
+    //     const objectId = new ObjectId(userId);
 
-        const user = await usersCollection.findOne({ _id: objectId });
-        if (!user) {
-          return res.status(404).json({ message: "User not found" });
-        }
-        return res.status(200).json({
-          message: "Get Single User",
-          success: true,
-          data: user,
-        });
-      } catch (error) {
-        return res.status(500).json({
-          message: "Error fetching user",
-          success: false,
-          error: error.message,
-        });
-      }
-    });
+    //     const user = await usersCollection.findOne({ _id: objectId });
+    //     if (!user) {
+    //       return res.status(404).json({ message: "User not found" });
+    //     }
+    //     return res.status(200).json({
+    //       message: "Get Single User",
+    //       success: true,
+    //       data: user,
+    //     });
+    //   } catch (error) {
+    //     return res.status(500).json({
+    //       message: "Error fetching user",
+    //       success: false,
+    //       error: error.message,
+    //     });
+    //   }
+    // });
 
-    app.get("/single-user/:id", async (req, res) => {
-      const userId = req.params.id;
+    // app.get("/single-user/:id", async (req, res) => {
+    //   const userId = req.params.id;
 
-      if (!userId || !ObjectId.isValid(userId)) {
-        return res.status(400).json({ error: "Invalid or missing user ID" });
-      }
-      console.log("myId 138", userId); //todo not getting my id:
-      try {
-        const objectId = new ObjectId(userId);
+    //   if (!userId || !ObjectId.isValid(userId)) {
+    //     return res.status(400).json({ error: "Invalid or missing user ID" });
+    //   }
+    //   console.log("myId 138", userId); //todo not getting my id:
+    //   try {
+    //     const objectId = new ObjectId(userId);
 
-        const user = await usersCollection.findOne({ _id: objectId });
-        if (!user) {
-          return res.status(404).json({ message: "User not found" });
-        }
-        return res.status(200).json({
-          message: "Get Single User",
-          success: true,
-          data: user,
-        });
-      } catch (error) {
-        return res.status(500).json({
-          message: "Error fetching user",
-          success: false,
-          error: error.message,
-        });
-      }
-    });
+    //     const user = await usersCollection.findOne({ _id: objectId });
+    //     if (!user) {
+    //       return res.status(404).json({ message: "User not found" });
+    //     }
+    //     return res.status(200).json({
+    //       message: "Get Single User",
+    //       success: true,
+    //       data: user,
+    //     });
+    //   } catch (error) {
+    //     return res.status(500).json({
+    //       message: "Error fetching user",
+    //       success: false,
+    //       error: error.message,
+    //     });
+    //   }
+    // });
 
     // socket io:
     const io = new Server(server, {
@@ -205,7 +205,7 @@ async function run() {
 
       // sendMessage:
       socket.on("sendMessage", async (data) => {
-        console.log(data); //todo: message is sent but not receive on just in time on client
+        console.log(data);
         const { senderId, receiverId, text } = data;
         // message save on database:
         const messages = await messageCollection.insertOne({
@@ -215,11 +215,13 @@ async function run() {
           Timestamp: new Date(),
         });
         console.log(messages);
+        // send real time data to sender and receiver:
+        // all ids will be here:
         const ids = [senderId, receiverId];
         ids.forEach((id) => {
           io.emit(`receiverMessage:${id}`, { text, senderId });
         });
-        // send real time data to sender and receiver:
+
         // io.emit(`receiverMessage:${senderId}`, { text, senderId });
         // io.emit(`receiverMessage:${receiverId}`, { text, senderId });
       });
@@ -227,7 +229,7 @@ async function run() {
       // get conversation of two users:
       app.get("/conversation/:user1Id/:user2Id", async (req, res) => {
         const { user1Id, user2Id } = req.params;
-        console.log(user1Id, user2Id); //todo:
+        console.log(user1Id, user2Id);
 
         const conversation = await messageCollection
           .find({
