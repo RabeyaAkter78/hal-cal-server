@@ -69,12 +69,14 @@ async function run() {
         }
 
         const user = { name, email, password, avatarUrl };
+
         const result = await usersCollection.insertOne(user);
         res.status(201).json({
           success: true,
           registerUserId: result.insertedId,
           file: req.file,
         });
+        io.emit("user", user);
       } catch (error) {
         console.error("Error saving user:", error);
         res
