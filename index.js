@@ -120,7 +120,8 @@ async function run() {
 
       try {
         const users = await usersCollection
-          .find({ _id: { $ne: new ObjectId(loggedInUserId) } }) //ne=not equal,
+          .find({ _id: { $ne: new ObjectId(loggedInUserId) } }) //ne= not equal
+          .sort({ _id: -1 })
           .toArray();
         res.json({ data: users });
       } catch (error) {
