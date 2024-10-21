@@ -192,7 +192,8 @@ async function run() {
     const io = new Server(server, {
       cors: {
         origin: ["https://gleeful-fox-006950.netlify.app/", "http://localhost:3000"],
-        methods: ["GET", "POST"],
+        methods: ["GET", "POST", "PUT", "PATCH"],
+        credentials: true,
       },
     });
 
