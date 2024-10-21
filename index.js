@@ -51,7 +51,7 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("chatApp");
     const usersCollection = db.collection("users");
@@ -191,7 +191,7 @@ async function run() {
     // socket io:
     const io = new Server(server, {
       cors: {
-        origin: "http://localhost:3000",
+        origin: ["https://gleeful-fox-006950.netlify.app/", "http://localhost:3000"],
         methods: ["GET", "POST"],
       },
     });
@@ -257,7 +257,7 @@ async function run() {
       });
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Connected to MongoDB successfully!");
   } catch (error) {
     console.error("An error occurred while connecting to MongoDB:", error);
